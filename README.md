@@ -1,7 +1,7 @@
-# Godsplanswap template
+# Gtps.Finance SWAP template
 
-### Rinkeby
+### Mainnet
 
-- Factory: 0xec26bd54e1B3b6BF97bF5c1bDFBaec9317179252
-- Router: 0xc57a95ad7d9726b75bf4a1e541150bf1b0d49c7a
-- Pair hash: 0x64bd37f535cec29b656c6f3ba3110b14ec36cccf7b15d67d7d3082d3f7ac2115
+- Factory: 0x6eeB4A7c1Cea697ee7BAF87de3D556bD200691eE
+- Router: 0x2d07585d5f3d79fdf7bb2fc6a6767027a787a8b8
+- Pair hash: •	0x0a6604cf955a46b83dab38f88aeabbfe06469a8eace1a55943e9de9ebce40657

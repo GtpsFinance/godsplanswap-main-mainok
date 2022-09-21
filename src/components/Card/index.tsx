@@ -1,40 +1,104 @@
-import React from 'react';
-import styled from 'styled-components';
-import { CardProps, Text } from 'rebass';
-import { Box } from 'rebass/styled-components';
+Skip to content
+Search or jump to…
+Pull requests
+Issues
+Marketplace
+Explore
+ 
+@GtpsFinance 
+ApeSwapFinance
+/
+apeswap-frontend
+Public
+Code
+Issues
+6
+Pull requests
+13
+Actions
+Projects
+Security
+Insights
+apeswap-frontend/src/components/CardValue/index.tsx /
+@Harambe-Nakamoto
+Harambe-Nakamoto feat: Add swap apr
+Latest commit 41b0ca9 on Mar 18
+ History
+ 1 contributor
+61 lines (54 sloc)  1.31 KB
 
-const Card = styled(Box)<{ width?: string; padding?: string; border?: string; borderRadius?: string }>`
-  width: ${({ width }) => width ?? '100%'};
-  border-radius: 16px;
-  padding: 1.25rem;
-  padding: ${({ padding }) => padding};
-  border: ${({ border }) => border};
-  border-radius: ${({ borderRadius }) => borderRadius};
-`;
-export default Card;
+import React, { useEffect, useRef } from 'react'
+import styled from 'styled-components'
+import { useCountUp } from 'react-countup'
+import { Text } from '@apeswapfinance/uikit'
 
-export const LightCard = styled(Card)`
-  border: 1px solid ${({ theme }) => theme.bg3};
-  background-color: ${({ theme }) => theme.bg2};
-`;
+interface CardValueProps {
+  value: number
+  decimals?: number
+  fontSize?: string
+  fontFamily?: string
+  prefix?: string
+  color?: string
+  text?: string
+  fontWeight?: number
+  differentFontSize?: string
+  top?: string
+}
 
-export const GreyCard = styled(Card)`
-  background-color: ${({ theme }) => theme.bg3};
-`;
+const CardValue: React.FC<CardValueProps> = ({
+  value,
+  decimals,
+  fontSize = 'px',
+  prefix,
+  color,
+  fontFamily,
+  fontWeight,
+  top,
+  differentFontSize,
+}) => {
+  const { countUp, update } = useCountUp({
+    start: 0,
+    end: value,
+    duration: 1,
+    separator: ',',
+    decimals:
+      // eslint-disable-next-line no-nested-ternary
+      decimals !== undefined ? decimals : value < 0 ? 4 : value > 1e5 ? 0 : 3,
+  })
 
-const BlueCardStyled = styled(Card)`
-  background-color: ${({ theme }) => theme.primary5};
-  color: ${({ theme }) => theme.primary1};
-  border-radius: 12px;
-  width: fit-content;
-`;
+  const StyledText = styled(Text)`
+    margin-top: ${top || 0};
+    font-weight: ${fontWeight || 400};
+    ${({ theme }) => theme.mediaQueries.xl} {
+      font-size: ${differentFontSize || fontSize};
+    }
+  `
 
-export const BlueCard = ({ children, ...rest }: CardProps) => {
+  const updateValue = useRef(update)
+
+  useEffect(() => {
+    updateValue.current(value)
+  }, [value, updateValue])
+
   return (
-    <BlueCardStyled {...rest}>
-      <Text fontWeight={500} color="#4F6DFF">
-        {children}
-      </Text>
-    </BlueCardStyled>
-  );
-};
+    <StyledText fontSize={fontSize} color={color} fontWeight={fontWeight} fontFamily={fontFamily}>
+      {prefix} {countUp}
+    </StyledText>
+  )
+}
+
+export default CardValue
+Footer
+© 2022 GitHub, Inc.
+Footer navigation
+Terms
+Privacy
+Security
+Status
+Docs
+Contact GitHub
+Pricing
+API
+Training
+Blog
+About

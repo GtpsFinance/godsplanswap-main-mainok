@@ -1,248 +1,345 @@
-import { Currency, Pair } from '@uniswap/sdk';
-import React, { useState, useCallback } from 'react';
-import styled from 'styled-components';
-import { darken } from 'polished';
-import { useCurrencyBalance } from '../../state/wallet/hooks';
-import CurrencySearchModal from '../SearchModal/CurrencySearchModal';
-import CurrencyLogo from '../CurrencyLogo';
-import DoubleCurrencyLogo from '../DoubleLogo';
-import { RowBetween } from '../Row';
-import { TYPE } from '../../theme';
-import { Input as NumericalInput } from '../NumericalInput';
-import { ReactComponent as DropDown } from '../../assets/images/dropdown.svg';
+import React, { useEffect, useState, useMemo } from 'react'
+import { Currency, Pair, Token } from '@ape.swap/sdk'
+import { Button, Text, useModal, Flex, ArrowDropDownIcon, useMatchBreakpoints } from '@apeswapfinance/uikit'
+import styled from 'styled-components'
+import { useTranslation } from 'contexts/Localization'
+import useActiveWeb3React from 'hooks/useActiveWeb3React'
+import { getTokenUsdPrice } from 'utils/getTokenUsdPrice'
+import { useCurrencyBalance } from '../../state/wallet/hooks'
+import CurrencySearchModal from '../SearchModal/CurrencySearchModal'
+import { CurrencyLogo, DoubleCurrencyLogo } from '../Logo'
+import { registerToken } from '../../utils/wallet'
 
-import { useActiveWeb3React } from '../../hooks';
-import { useTranslation } from 'react-i18next';
-import useTheme from '../../hooks/useTheme';
+import { RowBetween } from '../layout/Row'
+import { Input as NumericalInput } from './NumericalInput'
+import { WrappedTokenInfo } from '../../state/lists/hooks'
 
-const InputRow = styled.div<{ selected: boolean }>`
-  ${({ theme }) => theme.flexRowNoWrap}
-  align-items: center;
-  padding: ${({ selected }) => (selected ? '0.8rem 0.6rem 0.8rem 1.1rem' : '0.8rem 0.8rem 0.8rem 1.1rem')};
-`;
-
-const CurrencySelect = styled.button`
-  align-items: center;
-  height: 2.2rem;
-  font-size: 20px;
-  font-weight: 500;
-  border: none;
-  background-color: ${({ theme }) => theme.bg3};
-  color: ${({ theme }) => theme.text1};
-  border-radius: 12px;
-  outline: none;
-  cursor: pointer;
-  user-select: none;
-  border: none;
-  padding: 0 0.5rem;
-  transition: 0.2s;
-
-  :focus,
-  :hover {
-    background-color: ${({ theme }) => theme.bg4};
-  }
-`;
-
-const LabelRow = styled.div`
-  ${({ theme }) => theme.flexRowNoWrap}
-  align-items: center;
-  color: ${({ theme }) => theme.text1};
-  font-size: 0.75rem;
-  line-height: 1rem;
-  padding: 0.75rem 1rem 0 1rem;
-  span:hover {
-    cursor: pointer;
-    color: ${({ theme }) => darken(0.2, theme.text2)};
-  }
-`;
-
-const Aligner = styled.span`
+const CurrencySelectButton = styled(Button).attrs({ variant: 'text', scale: 'sm' })<{ removeLiquidity: boolean }>`
   display: flex;
-  align-items: center;
+  justify-content: flex-start;
+  background-color: ${({ theme }) => theme.colors.white4};
+  height: 75px;
+  width: 310px;
+  padding: 0;
+  &:hover {
+    background-color: ${({ theme }) => theme.colors.white2} !important;
+  }
+  ${({ theme }) => theme.mediaQueries.md} {
+    width: ${({ removeLiquidity }) => (removeLiquidity ? '300px' : '244px')};
+  } ;
+`
+const InputPanel = styled.div`
+  display: flex;
   justify-content: space-between;
-`;
-
-const StyledDropDown = styled(DropDown)`
-  margin: 0 0.25rem 0 0.5rem;
-  height: 35%;
-
-  path {
-    stroke: ${({ theme }) => theme.text1};
-    stroke-width: 1.5px;
-  }
-`;
-
-const InputPanel = styled.div<{ hideInput?: boolean }>`
-  ${({ theme }) => theme.flexColumnNoWrap}
+  align-items: center;
   position: relative;
-  border-radius: ${({ hideInput }) => (hideInput ? '8px' : '20px')};
-  background-color: ${({ theme }) => theme.bg1};
+  border-radius: 20px;
   z-index: 1;
-`;
+`
+const Container = styled.div<{ removeLiquidity: boolean }>`
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border-radius: 16px;
+  width: 310px;
+  height: 75px;
+  background-color: ${({ theme }) => theme.colors.white4};
+  ${({ theme }) => theme.mediaQueries.md} {
+    width: ${({ removeLiquidity }) => (removeLiquidity ? '300px' : '340px')};
+  } ;
+`
 
-const Container = styled.div<{ hideInput: boolean }>`
-  border-radius: ${({ hideInput }) => (hideInput ? '8px' : '20px')};
-  border: 1px solid ${({ theme }) => theme.bg3};
-`;
+const CurrencyInputContainer = styled.div<{ removeLiquidity: boolean; orders: boolean }>`
+  background-color: ${({ theme }) => theme.colors.white3};
+  border-radius: ${({ orders }) => (orders ? '0px' : '20px')};
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+  ${({ orders }) => (orders ? 'flex-end' : 'center')};
+  padding: ${({ removeLiquidity }) => (removeLiquidity ? '25px 0px 40px 0px' : '45px 0px 25px 0px')};
+  height: 263px;
+  width: 330px;
+  ${({ theme }) => theme.mediaQueries.md} {
+    height: ${({ orders }) => (orders ? '125px' : '155px')};
+    width: 100%;
+    flex-direction: row;
+    padding: 0px 15px 0px 15px;
+    align-items: ${({ orders }) => (orders ? 'flex-end' : 'center')};
+  }
+`
 
-const StyledTokenName = styled.span<{ active?: boolean }>`
-  ${({ active }) => (active ? '  margin: 0 0.25rem 0 0.75rem;' : '  margin: 0 0.25rem 0 0.25rem;')}
-  font-size:  ${({ active }) => (active ? '20px' : '16px')};
-`;
+const CurrencySymbol = styled.div`
+  opacity: 0.5;
+  line-height: 24px;
+  margin-right: 20px;
+`
 
-const StyledBalanceMax = styled.button`
-  padding: 0.5rem;
-  background-color: ${({ theme }) => theme.bg3};
-  border: 1px solid ${({ theme }) => theme.bg3};
-  border-radius: 0.5rem;
-  font-size: 0.875rem;
-  transition: 0.2s;
-
-  font-weight: 500;
+const MetaMaskLogo = styled.img`
+  display: inline;
   cursor: pointer;
-  margin-right: 0.5rem;
-  color: ${({ theme }) => theme.primaryText1};
-
-  :hover {
-    background-color: ${({ theme }) => theme.primary3};
-  }
-  :focus {
-    outline: none;
-  }
-
-  ${({ theme }) => theme.mediaWidth.upToExtraSmall`
-    margin-right: 0.5rem;
-  `};
-`;
+  position: absolute;
+  bottom: -30px;
+  marginleft: 10px;
+  width: 20px;
+`
 
 interface CurrencyInputPanelProps {
-  value: string;
-  onUserInput: (value: string) => void;
-  onMax?: () => void;
-  showMaxButton: boolean;
-  label?: string;
-  onCurrencySelect?: (currency: Currency) => void;
-  currency?: Currency | null;
-  disableCurrencySelect?: boolean;
-  hideBalance?: boolean;
-  pair?: Pair | null;
-  hideInput?: boolean;
-  otherCurrency?: Currency | null;
-  id: string;
-  showCommonBases?: boolean;
-  customBalanceText?: string;
+  value: string
+  onUserInput: (value: string) => void
+  onMax?: () => void
+  showMaxButton: boolean
+  label?: string
+  onCurrencySelect: (currency: Currency) => void
+  currency?: Currency | null
+  disableCurrencySelect?: boolean
+  disableInput?: boolean
+  hideBalance?: boolean
+  pair?: Pair | null
+  otherCurrency?: Currency | null
+  id: string
+  isLp?: boolean
+  showCommonBases?: boolean
+  removeLiquidity?: boolean
+  addLiquidity?: boolean
+  orders?: boolean
 }
-
 export default function CurrencyInputPanel({
   value,
   onUserInput,
   onMax,
   showMaxButton,
-  label = 'Input',
+  label,
   onCurrencySelect,
   currency,
   disableCurrencySelect = false,
+  disableInput = false,
+  isLp = false,
   hideBalance = false,
   pair = null, // used for double token logo
-  hideInput = false,
   otherCurrency,
   id,
   showCommonBases,
-  customBalanceText,
+  removeLiquidity,
+  addLiquidity,
+  orders,
 }: CurrencyInputPanelProps) {
-  const { t } = useTranslation();
+  const { t } = useTranslation()
+  const { account, chainId } = useActiveWeb3React()
+  const selectedCurrencyBalance = useCurrencyBalance(account ?? undefined, currency ?? undefined)
+  const [tokenPrice, setTokenPrice] = useState<number>(null)
+  const isNative = currency?.symbol === 'ETH'
+  const { isMd, isSm, isXs } = useMatchBreakpoints()
+  const isMobile = isMd || isSm || isXs
 
-  const [modalOpen, setModalOpen] = useState(false);
-  const { account } = useActiveWeb3React();
-  const selectedCurrencyBalance = useCurrencyBalance(account ?? undefined, currency ?? undefined);
-  const theme = useTheme();
+  useEffect(() => {
+    const fetchTokenPrice = async () => {
+      const tokenPriceReturned = await getTokenUsdPrice(
+        chainId,
+        currency instanceof Token ? currency?.address : '',
+        currency?.decimals,
+        isLp,
+        isNative,
+      )
+      setTokenPrice(tokenPriceReturned)
+    }
+    fetchTokenPrice()
+  }, [currency, chainId, isLp, isNative])
 
-  const handleDismissSearch = useCallback(() => {
-    setModalOpen(false);
-  }, [setModalOpen]);
+  const addToMetaMask = () => {
+    registerToken(
+      currency instanceof Token ? currency?.address : '',
+      currency?.symbol,
+      currency?.decimals,
+      currency instanceof WrappedTokenInfo ? currency?.tokenInfo.logoURI : '',
+    ).then(() => '')
+  }
+
+  const [onPresentCurrencyModal] = useModal(
+    <CurrencySearchModal
+      onCurrencySelect={onCurrencySelect}
+      selectedCurrency={currency}
+      otherSelectedCurrency={otherCurrency}
+      showCommonBases={showCommonBases}
+    />,
+  )
+
+  const currencySymbol = useMemo(() => {
+    return currency && currency.symbol && currency.symbol.length > 20
+      ? `${currency.symbol.slice(0, 4)}...${currency.symbol.slice(currency.symbol.length - 5, currency.symbol.length)}`
+      : currency?.getSymbol(chainId)
+  }, [currency, chainId])
 
   return (
-    <InputPanel id={id}>
-      <Container hideInput={hideInput}>
-        {!hideInput && (
-          <LabelRow>
-            <RowBetween>
-              <TYPE.body color={theme.text2} fontWeight={500} fontSize={14}>
-                {label}
-              </TYPE.body>
-              {account && (
-                <TYPE.body
-                  onClick={onMax}
-                  color={theme.text2}
-                  fontWeight={500}
-                  fontSize={14}
-                  style={{ display: 'inline', cursor: 'pointer' }}
-                >
-                  {!hideBalance && !!currency && selectedCurrencyBalance
-                    ? (customBalanceText ?? 'Balance: ') + selectedCurrencyBalance?.toSignificant(6)
-                    : ' -'}
-                </TYPE.body>
-              )}
-            </RowBetween>
-          </LabelRow>
+    <CurrencyInputContainer removeLiquidity={removeLiquidity} orders={orders}>
+      <Flex style={{ position: 'relative' }}>
+        <CurrencySelectButton
+          removeLiquidity={removeLiquidity}
+          onClick={() => {
+            if (!disableCurrencySelect) {
+              onPresentCurrencyModal()
+            }
+          }}
+        >
+          <Flex alignItems="center" justifyContent="flex-start" style={{ width: '100%' }}>
+            {pair ? (
+              <div style={{ paddingLeft: '10px' }}>
+                <DoubleCurrencyLogo currency0={pair.token0} currency1={pair.token1} size={30} margin />
+              </div>
+            ) : currency ? (
+              <CurrencyLogo currency={currency} size="50px" style={{ margin: '0 0px 0 10px' }} />
+            ) : null}
+            {pair ? (
+              <Text id="pair" bold fontSize="19px">
+                {pair?.token0.getSymbol(chainId)}-{pair?.token1.getSymbol(chainId)}
+              </Text>
+            ) : (
+              <Text id="pair" fontSize="21px" bold style={{ marginLeft: '10px' }}>
+                {(currency && currency.symbol && currency.symbol.length > 20
+                  ? `${currency.symbol.slice(0, 4)}...${currency.symbol.slice(
+                      currency.symbol.length - 5,
+                      currency.symbol.length,
+                    )}`
+                  : currency?.getSymbol(chainId)) || (
+                  <div className="bg-transparent hover:bg-primary border border-low-emphesis rounded-full px-2 py-1 text-xs font-medium mt-1 whitespace-nowrap ">
+                    {t('Select a token')}
+                  </div>
+                )}
+              </Text>
+            )}
+            {!disableCurrencySelect && (
+              <ArrowDropDownIcon width="13px" style={{ position: 'absolute', right: '15px' }} />
+            )}
+          </Flex>
+        </CurrencySelectButton>
+        {!removeLiquidity && !addLiquidity && (
+          <Text
+            onClick={onMax}
+            fontSize="14px"
+            style={{ display: 'inline', cursor: 'pointer', position: 'absolute', top: '-30px', marginLeft: '10px' }}
+          >
+            {id === 'swap-currency-input' && `${t('From')}:`}
+            {id === 'swap-currency-output' && `${t('To')}:`}
+            {id === 'orders-currency-input' && `${t('Swap')}:`}
+            {id === 'orders-currency-output' && `${t('For')}:`}
+          </Text>
         )}
-        <InputRow style={hideInput ? { padding: '0', borderRadius: '8px' } : {}} selected={disableCurrencySelect}>
-          {!hideInput && (
-            <>
-              <NumericalInput
-                className="token-amount-input"
-                value={value}
-                onUserInput={(val) => {
-                  onUserInput(val);
-                }}
-              />
-              {account && currency && showMaxButton && label !== 'To' && (
-                <StyledBalanceMax onClick={onMax}>MAX</StyledBalanceMax>
-              )}
-            </>
-          )}
-          <CurrencySelect
-            className="open-currency-select-button"
-            onClick={() => {
-              if (!disableCurrencySelect) {
-                setModalOpen(true);
-              }
+
+        {account && !isNative && (
+          <MetaMaskLogo onClick={addToMetaMask} src="/images/metamask-fox.svg" alt="Add to MetaMask" />
+        )}
+
+        {account && (
+          <Text
+            onClick={onMax}
+            fontSize="14px"
+            style={{
+              display: 'inline',
+              cursor: 'pointer',
+              position: 'absolute',
+              bottom: '-30px',
+              marginLeft: `${!isNative ? '30px' : '0px'}`,
             }}
           >
-            <Aligner>
-              {pair ? (
-                <DoubleCurrencyLogo currency0={pair.token0} currency1={pair.token1} size={24} margin={true} />
-              ) : currency ? (
-                <CurrencyLogo currency={currency} size={'24px'} />
-              ) : null}
-              {pair ? (
-                <StyledTokenName className="pair-name-container">
-                  {pair?.token0.symbol}:{pair?.token1.symbol}
-                </StyledTokenName>
-              ) : (
-                <StyledTokenName className="token-symbol-container" active={Boolean(currency && currency.symbol)}>
-                  {(currency && currency.symbol && currency.symbol.length > 20
-                    ? currency.symbol.slice(0, 4) +
-                      '...' +
-                      currency.symbol.slice(currency.symbol.length - 5, currency.symbol.length)
-                    : currency?.symbol) || t('Token')}
-                </StyledTokenName>
-              )}
-              {!disableCurrencySelect && <StyledDropDown />}
-            </Aligner>
-          </CurrencySelect>
-        </InputRow>
-      </Container>
-      {!disableCurrencySelect && onCurrencySelect && (
-        <CurrencySearchModal
-          isOpen={modalOpen}
-          onDismiss={handleDismissSearch}
-          onCurrencySelect={onCurrencySelect}
-          selectedCurrency={currency}
-          otherSelectedCurrency={otherCurrency}
-          showCommonBases={showCommonBases}
-        />
-      )}
-    </InputPanel>
-  );
+            {!hideBalance && !!currency
+              ? removeLiquidity
+                ? t('LP Balance: %balance%', { balance: selectedCurrencyBalance?.toSignificant(6) ?? 'Loading' })
+                : t('Balance: %balance%', { balance: selectedCurrencyBalance?.toSignificant(6) ?? 'Loading' })
+              : ' -'}
+          </Text>
+        )}
+        {isMobile && (
+          <Text
+            fontSize="14px"
+            style={{
+              display: 'inline',
+              position: 'absolute',
+              bottom: '-30px',
+              right: '10px',
+            }}
+          >
+            {!hideBalance && !!currency && value
+              ? isLp
+                ? `~ $${(
+                    tokenPrice *
+                    (parseFloat(selectedCurrencyBalance?.toSignificant(6)) * (parseInt(value) / 100))
+                  )?.toFixed(2)}`
+                : `~ $${(tokenPrice * parseFloat(value))?.toFixed(2)}`
+              : ' -'}
+          </Text>
+        )}
+      </Flex>
+      <InputPanel id={id}>
+        <Container removeLiquidity={removeLiquidity}>
+          {account && currency && showMaxButton && label !== 'To' && !orders && (
+            <Button
+              onClick={onMax}
+              variant="primary"
+              style={{
+                margin: '0px 10px 0px 10px',
+                padding: '0px 10px 0px 10px',
+                fontSize: '15px',
+                borderRadius: '10px',
+                fontWeight: 700,
+                lineHeight: 0,
+              }}
+            >
+              {t('MAX')}
+            </Button>
+          )}
+          <RowBetween>
+            <NumericalInput
+              id="token-amount-input"
+              removeLiquidity={removeLiquidity}
+              disabled={disableInput}
+              value={value}
+              onUserInput={(val) => {
+                onUserInput(val)
+              }}
+              align={orders ? 'left' : 'right'}
+            />
+            {orders && <CurrencySymbol>{currencySymbol}</CurrencySymbol>}
+          </RowBetween>
+          {removeLiquidity && account && (
+            <Text
+              fontSize="14px"
+              style={{
+                position: 'absolute',
+                bottom: '-30px',
+                left: '10px',
+              }}
+            >
+              {!hideBalance && !!currency && value
+                ? `${t('LPs to Remove')}: ${
+                    selectedCurrencyBalance?.toSignificant(6)
+                      ? (parseFloat(selectedCurrencyBalance?.toSignificant(6)) * (parseInt(value) / 100)).toFixed(6)
+                      : t('Loading')
+                  }`
+                : '-'}
+            </Text>
+          )}
+          {!isMobile && (
+            <Text
+              fontSize="14px"
+              style={{
+                display: 'inline',
+                position: 'absolute',
+                bottom: '-30px',
+                right: '10px',
+              }}
+            >
+              {!hideBalance && !!currency && value
+                ? isLp
+                  ? `~ $${(
+                      tokenPrice *
+                      (parseFloat(selectedCurrencyBalance?.toSignificant(6)) * (parseInt(value) / 100))
+                    )?.toFixed(2)}`
+                  : `~ $${(tokenPrice * parseFloat(value))?.toFixed(2)}`
+                : ' -'}
+            </Text>
+          )}
+        </Container>
+      </InputPanel>
+    </CurrencyInputContainer>
+  )
 }
